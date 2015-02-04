@@ -71,72 +71,91 @@ namespace LoL_Account_Checker
 
             bw.DoWork += (o, args) =>
             {
-                var b = o as BackgroundWorker;
-
-                var sr = new StreamReader(inputFileTextBox.Text);
-                var sw = new StreamWriter(outputFileTextBox.Text);
-
-                var totalLines = sr.ReadToEnd().Split(new[] { '\n' }).Count();
-
-                var lineCount = 0;
-
-                sr.DiscardBufferedData();
-                sr.BaseStream.Seek(0, SeekOrigin.Begin);
-                sr.BaseStream.Position = 0;
-
-                string line;
-                while ((line = sr.ReadLine()) != null)
+                try
                 {
-                    var accountData = line.Split(new[] { ':' });
+                    var b = o as BackgroundWorker;
 
-                    if (accountData.Count() < 2)
+                    var sr = new StreamReader(inputFileTextBox.Text);
+                    var sw = new StreamWriter(outputFileTextBox.Text);
+
+                    var totalLines = sr.ReadToEnd().Split(new[] { '\n' }).Count();
+
+                    var lineCount = 0;
+
+                    sr.DiscardBufferedData();
+                    sr.BaseStream.Seek(0, SeekOrigin.Begin);
+                    sr.BaseStream.Position = 0;
+
+                    string line;
+                    while ((line = sr.ReadLine()) != null)
                     {
-                        continue;
+                        var accountData = line.Split(new[] { ':' });
+
+                        if (accountData.Count() < 2)
+                        {
+                            continue;
+                        }
+
+                        var username = accountData[0];
+                        var password = accountData[1];
+
+
+                        var completed = false;
+                        var result = Client.Result.Error;
+
+                        var client = new Client(region, username, password);
+
+                        client.OnReport += (sender1, r) =>
+                        {
+                            completed = true;
+                            result = r;
+                        };
+
+                        var start = DateTime.Now;
+                        while (true)
+                        {
+                            if (start.AddSeconds(1) > DateTime.Now)
+                                continue;
+                            
+                            if (client.Completed)
+                                break;
+
+
+                            start = DateTime.Now;
+                            // wait
+                        }
+
+                        if (result == Client.Result.Success)
+                        {
+                            sw.WriteLine(
+                                "Account: {0} | Password: {1} | Summoner Name: {2} | Level: {3} | RP: {4} | IP: {5} | Champions: {6} | Skins: {7} | Rune Pages: {8}",
+                                client.Data.Username, client.Data.Password, client.Data.SummonerName, client.Data.Level,
+                                client.Data.RpBalance, client.Data.Ipbalance, client.Data.Champions, client.Data.Skins,
+                                client.Data.RunePages);
+
+                            client.Disconnect();
+                        }
+                        else
+                        {
+                            sw.WriteLine(
+                                "Account: {0} | Password: {1} | Error: {2}", client.Data.Username, client.Data.Password,
+                                client.ErrorMessage);
+                        }
+
+                        Console.WriteLine("[{0:HH:mm}] <{1}> Completed!", DateTime.Now, client.Data.Username);
+
+                        lineCount++;
+
+                        b.ReportProgress((lineCount * 100) / totalLines);
                     }
 
-                    var username = accountData[0];
-                    var password = accountData[1];
-
-                    var client = new Client(region, username, password);
-
-                    var completed = false;
-                    var result = Client.Result.Error;
-                    string message = "";
-
-                    client.OnReport += (sender1, r) =>
-                    {
-                        completed = true;
-                        result = r;
-                    };
-
-                    while (!completed)
-                    {
-                        // wait
-                    }
-
-                    lineCount++;
-
-                    b.ReportProgress((lineCount * 100) / totalLines);
-
-
-                    if (result == Client.Result.Success)
-                    {
-                        sw.WriteLine(
-                            "Account: {0} | Password: {1} | Summoner Name: {2} | Level: {3} | RP: {4} | IP: {5} | Champions: {6} | Skins: {7} | Rune Pages: {8}",
-                            client.Data.Username, client.Data.Password, client.Data.SummonerName, client.Data.Level,
-                            client.Data.RpBalance, client.Data.Ipbalance, client.Data.Champions, client.Data.Skins,
-                            client.Data.RunePages);
-
-                        client.Disconnect();
-                    }
-                    else
-                    {
-                        sw.WriteLine("Account: {0} | Password: {1} | Error", client.Data.Username, client.Data.Password);
-                    }
+                    sw.Close();
+                    sr.Close();
                 }
-
-                sw.Close();
-                sr.Close();
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex);
+                }
             };
 
             bw.ProgressChanged += (o, args) => { toolStripProgressBar1.Value = args.ProgressPercentage; };
