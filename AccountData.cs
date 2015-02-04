@@ -1,5 +1,6 @@
 ﻿namespace LoL_Account_Checker
 {
+
     public class AccountData
     {
         public int Champions;

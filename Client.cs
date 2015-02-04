@@ -9,35 +9,36 @@ using PVPNetConnect.RiotObjects.Platform.Catalog.Champion;
 
 namespace LoL_Account_Checker
 {
-    public delegate void ReceivedData(object sender, AccountData data);
+    public delegate void Report(object sender, Client.Result result);
 
-    internal class Client
+    public class Client
     {
+        public enum Result
+        {
+            Success,
+            Error
+        }
+
+        public PVPNetConnection Connection;
         public AccountData Data;
-        private PVPNetConnection _connection;
-        private bool _isDone;
 
         public Client(Region region, string username, string password)
         {
-            _isDone = false;
             Data = new AccountData { Username = username, Password = password };
 
-            _connection = new PVPNetConnection();
-            _connection.OnLogin += OnLogin;
+            Connection = new PVPNetConnection();
+            Connection.OnLogin += OnLogin;
 
-            _connection.Connect(username, password, region, "5.2.15");
+            Connection.OnError += OnError;
+
+            Connection.Connect(username, password, region, "5.2.15");
         }
 
-        public bool IsDone
-        {
-            get { return _isDone; }
-        }
-
-        public event ReceivedData OnReceivedData;
+        public event Report OnReport;
 
         public void Disconnect()
         {
-            _connection.Disconnect();
+            Connection.Disconnect();
         }
 
         private void OnLogin(object sender, string username, string ipAddress)
@@ -45,15 +46,20 @@ namespace LoL_Account_Checker
             GetData();
         }
 
+        private void OnError(object sender, Error error)
+        {
+            Report(Result.Error);
+        }
+
         private async void GetData()
         {
-            var loginPacket = await _connection.GetLoginDataPacketForUser();
+            var loginPacket = await Connection.GetLoginDataPacketForUser();
             if (loginPacket.AllSummonerData == null)
             {
                 return;
             }
 
-            var champions = await _connection.GetAvailableChampions();
+            var champions = await Connection.GetAvailableChampions();
             var skins = new List<ChampionSkinDTO>();
 
             foreach (var champion in champions)
@@ -70,14 +76,14 @@ namespace LoL_Account_Checker
             Data.RunePages = loginPacket.AllSummonerData.SpellBook.BookPages.Count;
             Data.SummonerName = loginPacket.AllSummonerData.Summoner.Name;
 
-            ReceivedData(Data);
+            Report(Result.Success);
         }
 
-        protected virtual void ReceivedData(AccountData data)
+        protected virtual void Report(Result result)
         {
-            if (OnReceivedData != null)
+            if (OnReport != null)
             {
-                OnReceivedData(this, data);
+                OnReport(this, result);
             }
         }
     }
